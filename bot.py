@@ -11,7 +11,7 @@ TOKEN = "8765639328:AAFk1v5PnqcnqOqk3N7Xbugquy8MT3BBr_U"
 CREATOR_ID = 8269156736
 
 # ===== НАСТРОЙКИ ПРОКСИ (Cloudflare Worker) =====
-# URL вашего Worker из Cloudflare
+# URL вашего Worker
 TELEGRAM_API_PROXY = "https://little-night-33f6.anrew-2023.workers.dev"
 
 # Включаем логирование
@@ -431,25 +431,31 @@ async def main():
     
     print("🔧 Создание приложения...")
     
+    builder = ApplicationBuilder().token(TOKEN)
+    
     # Если используем прокси через Cloudflare Worker
     if TELEGRAM_API_PROXY:
         print(f"🌐 Используется прокси: {TELEGRAM_API_PROXY}")
-        # Устанавливаем прокси через переменные окружения
-        os.environ["HTTPS_PROXY"] = TELEGRAM_API_PROXY
-        os.environ["HTTP_PROXY"] = TELEGRAM_API_PROXY
-    
-    builder = ApplicationBuilder().token(TOKEN)
+        # Устанавливаем базовый URL для API через прокси
+        # Это работает в python-telegram-bot >= 21.0
+        builder = builder.base_url(TELEGRAM_API_PROXY)
     
     # Увеличиваем таймауты для стабильности
     builder = builder.connect_timeout(60).read_timeout(60).write_timeout(60)
     
     application = builder.build()
     
+    # Регистрируем команды
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("menu", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("cancel", cancel_command))
+    application.add_handler(CommandHandler("settings", lambda u, c: u.message.reply_text("Используйте кнопки в меню")))
+    
+    # Регистрируем обработчики callback-запросов
     application.add_handler(CallbackQueryHandler(button_handler))
+    
+    # Обработчик ввода текста (для смены имени)
     application.add_handler(CommandHandler("name", change_name))
     application.add_handler(CommandHandler("custom", lambda u, c: u.message.reply_text("🚧 В разработке")))
     
