@@ -96,20 +96,12 @@ def update_user_gender(user_id, gender):
     conn.commit()
     conn.close()
 
-def get_custom_actions():
-    conn = sqlite3.connect('dotbot.db')
-    c = conn.cursor()
-    c.execute('SELECT trigger, response_male, response_female, emoji FROM custom_actions')
-    actions = c.fetchall()
-    conn.close()
-    return actions
-
-# ===== ИНЛАЙН-РЕЖИМ (КАК У IRIS_BLACK) =====
+# ===== ИНЛАЙН-РЕЖИМ =====
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query_text = update.inline_query.query.strip()
     user_id = update.effective_user.id
     
-    # Пустой запрос
+    # Пустой запрос - помощь
     if not query_text:
         results = [InlineQueryResultArticle(
             id="help",
@@ -122,7 +114,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.inline_query.answer(results, cache_time=60)
         return
     
-    # Проверка на trig.
+    # Не trig. - подсказка
     if not query_text.lower().startswith("trig."):
         results = [InlineQueryResultArticle(
             id="hint",
@@ -138,6 +130,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Разбор: trig. Обнять @username
     parts = query_text.split(" ", 2)
     if len(parts) < 3:
+        # Показываем популярные действия
         results = []
         for action in ["обнять", "поцеловать", "ударить", "погладить"]:
             display = action.capitalize()
@@ -153,14 +146,14 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     action = parts[1].lower()
-    target_username = parts[2].strip()
+    target_input = parts[2].strip()
     
-    # Убираем @ если есть
-    if target_username.startswith("@"):
-        target_username = target_username[1:]
+    # Убираем @
+    if target_input.startswith("@"):
+        target_input = target_input[1:]
     
     # Проверка на себя
-    if target_username == update.effective_user.username:
+    if target_input == update.effective_user.username:
         results = [InlineQueryResultArticle(
             id="self",
             title="😅 Нельзя на себя!",
@@ -170,7 +163,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # Проверка на бота
-    if target_username == "DotBotRPG_bot":
+    if target_input == "DotBotRPG_bot":
         results = [InlineQueryResultArticle(
             id="bot",
             title="🤖 Я бот!",
@@ -179,7 +172,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.inline_query.answer(results, cache_time=0)
         return
     
-    # Получаем данные отправителя
+    # Получаем отправителя
     user = get_user(user_id)
     if not user:
         results = [InlineQueryResultArticle(
@@ -194,24 +187,16 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sender_gender = user[2] if user else 'male'
     sender_name = user[3] if user and user[3] else user[1] if user else update.effective_user.first_name
     
-    # ===== ПОЛУЧАЕМ НАСТОЯЩЕЕ ИМЯ ЦЕЛИ =====
-    target_name = target_username  # запасной вариант
-    
+    # Получаем имя цели
+    target_name = target_input
     try:
-        # Пытаемся получить пользователя по username
-        target_user = await context.bot.get_chat(f"@{target_username}")
-        if target_user:
-            if target_user.first_name:
-                target_name = target_user.first_name
-                if target_user.last_name:
-                    target_name += " " + target_user.last_name
-            elif target_user.title:  # если это группа/канал
-                target_name = target_user.title
-    except Exception as e:
-        # Если не нашли - используем username
-        target_name = target_username
+        target_user = await context.bot.get_chat(f"@{target_input}")
+        if target_user and target_user.first_name:
+            target_name = target_user.first_name
+    except:
+        target_name = target_input
     
-    # Проверяем встроенные действия
+    # Проверяем действия
     if action in DEFAULT_ACTIONS:
         data = DEFAULT_ACTIONS[action]
         verb = data['male'] if sender_gender == 'male' else data['female']
@@ -226,22 +211,6 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )]
         await update.inline_query.answer(results, cache_time=0)
         return
-    
-    # Проверяем кастомные действия
-    custom = get_custom_actions()
-    for c in custom:
-        if c[0].lower() == action:
-            verb = c[1] if sender_gender == 'male' else c[2]
-            emoji = c[3] if c[3] else ""
-            response = f"{sender_name} {verb} {target_name} {emoji}".strip()
-            results = [InlineQueryResultArticle(
-                id=f"custom_{action}",
-                title=f"{action.capitalize()} → {target_name}",
-                description=response,
-                input_message_content=InputTextMessageContent(response)
-            )]
-            await update.inline_query.answer(results, cache_time=0)
-            return
     
     # Действие не найдено
     results = [InlineQueryResultArticle(
@@ -316,6 +285,12 @@ async def all_actions_menu(query):
     keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="back")]]
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
+async def premium_menu(query):
+    await query.edit_message_text(
+        "⭐ Премиум\n\n🔓 Что вы получите:\n✅ 25 кастомных действий\n✅ Эмодзи\n✅ Смена имени\n\n💳 199 ₽/месяц\n💳 1 490 ₽ навсегда",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="back")]])
+    )
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -341,10 +316,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(f"✅ Пол изменён на {'Мужской' if gender == 'male' else 'Женский'}!")
         await settings_menu(query)
     elif data == "premium":
-        await query.edit_message_text(
-            "⭐ Премиум\n\n🔓 Что вы получите:\n✅ 25 кастомных действий\n✅ Эмодзи\n✅ Смена имени\n\n💳 199 ₽/месяц\n💳 1 490 ₽ навсегда",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="back")]])
-        )
+        await premium_menu(query)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -380,8 +352,8 @@ async def main():
     
     print("=" * 50)
     print("🤖 DotBotRPG запущен с инлайн-режимом!")
-    print(f"👑 Создатель: {CREATOR_ID}")
-    print(f"📋 Действий: {len(DEFAULT_ACTIONS)}")
+    print("👑 Создатель: {}".format(CREATOR_ID))
+    print("📋 Действий: {}".format(len(DEFAULT_ACTIONS)))
     print("=" * 50)
     print("✅ Бот готов к работе!")
     print("=" * 50)
