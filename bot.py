@@ -10,13 +10,9 @@ import asyncio
 TOKEN = "8765639328:AAFk1v5PnqcnqOqk3N7Xbugquy8MT3BBr_U"
 CREATOR_ID = 8269156736
 
-# ===== НАСТРОЙКИ ПРОКСИ (для Railway) =====
-# Используем Cloudflare Worker как прокси
-# URL вашего Worker из Cloudflare (ЗАМЕНИТЕ НА СВОЙ!)
+# ===== НАСТРОЙКИ ПРОКСИ (Cloudflare Worker) =====
+# URL вашего Worker из Cloudflare
 TELEGRAM_API_PROXY = "https://little-night-33f6.anrew-2023.workers.dev"
-
-# Можно также указать через переменную окружения на Railway
-# TELEGRAM_API_PROXY = os.environ.get("TELEGRAM_API_BASE", None)
 
 # Включаем логирование
 logging.basicConfig(
@@ -434,21 +430,21 @@ async def main():
     init_db()
     
     print("🔧 Создание приложения...")
-    builder = ApplicationBuilder().token(TOKEN)
     
     # Если используем прокси через Cloudflare Worker
     if TELEGRAM_API_PROXY:
         print(f"🌐 Используется прокси: {TELEGRAM_API_PROXY}")
-        # Устанавливаем базовый URL для API через прокси
-        # Это работает в python-telegram-bot >= 21.0
-        builder = builder.base_url(TELEGRAM_API_PROXY)
+        # Устанавливаем прокси через переменные окружения
+        os.environ["HTTPS_PROXY"] = TELEGRAM_API_PROXY
+        os.environ["HTTP_PROXY"] = TELEGRAM_API_PROXY
+    
+    builder = ApplicationBuilder().token(TOKEN)
     
     # Увеличиваем таймауты для стабильности
     builder = builder.connect_timeout(60).read_timeout(60).write_timeout(60)
     
     application = builder.build()
     
-    # Регистрируем команды
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("menu", start))
     application.add_handler(CommandHandler("help", help_command))
